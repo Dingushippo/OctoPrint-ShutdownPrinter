@@ -1,0 +1,11 @@
+MANIFEST.in
+README.md
+setup.py
+OctoPrint_ShutdownPrinter.egg-info/PKG-INFO
+OctoPrint_ShutdownPrinter.egg-info/SOURCES.txt
+OctoPrint_ShutdownPrinter.egg-info/dependency_links.txt
+OctoPrint_ShutdownPrinter.egg-info/entry_points.txt
+OctoPrint_ShutdownPrinter.egg-info/not-zip-safe
+OctoPrint_ShutdownPrinter.egg-info/requires.txt
+OctoPrint_ShutdownPrinter.egg-info/top_level.txt
+octoprint_shutdownprinter/__init__.py

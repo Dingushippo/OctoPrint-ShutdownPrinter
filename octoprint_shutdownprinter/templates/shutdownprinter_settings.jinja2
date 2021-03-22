@@ -28,6 +28,36 @@
     </div>
 	
 	<hr>
+    <h5>Mode ClasPlug</h5>
+	<div class="control-group">
+		<div class="controls">
+			<label class="checkbox">
+			<input type="checkbox" id="shutdownprinter_mode_shutdown_clas" data-bind="checked: settings.plugins.shutdownprinter._mode_shutdown_clas">activate this mode
+			</label>
+		</div>
+	</div>
+	<div class="control-group">
+		<label class="control-label">{{ _('Plug name)') }}</label>
+		<div class="controls">
+			<div class="input-append">
+				<input type="text"  class="input" data-bind="value: settings.plugins.shutdownprinter._clas_plug_name">
+			</div>
+		</div>
+	</div>
+    <div class="control-group">
+		<label class="control-label">{{ _('Connection timeout)') }}</label>
+		<div class="controls">
+			<div class="input-append">
+				<input type="number" class="input" data-bind="value: settings.plugins.shutdownprinter._clas_plug_timeout">
+			</div>
+		</div>
+	</div>
+	<div class="control-group">
+        <div class="controls">
+            <button id="connect_shutdownprinter_clas" type="button" class="btn btn-primary pull-right"><i class="fa fa-spinner fa-spin" style="display: none;"></i>Connect</button>
+        </div>
+    </div>
+	<hr>
 	<h5>Mode API</h5>
 	<div class="control-group">
 		<div class="controls">

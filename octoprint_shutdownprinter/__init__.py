@@ -8,13 +8,14 @@ except (ImportError, RuntimeError):
 	import urllib.request as urllib2
 import ssl
 import octoprint.plugin
+import broadlink
 try:
 	from octoprint.access.permissions import Permissions, ADMIN_GROUP, USER_GROUP
 except (ImportError, RuntimeError):
 	from octoprint.server import current_user, admin_permission, user_permission
 from octoprint.util import RepeatedTimer
 from octoprint.events import eventManager, Events
-from flask import make_response
+from flask import make_response, jsonify
 from flask_babel import gettext
 import time
 import threading
@@ -39,6 +40,8 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 		self._mode_shutdown_gcode = True
 		self._mode_shutdown_api = False
 		self._mode_shutdown_api_custom = False
+		self._mode_shutdown_clas = False
+		self._clas_plug_name = ""
 		self.api_custom_GET = False
 		self.api_custom_POST = False
 		self.api_custom_PUT = False
@@ -62,9 +65,15 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 		self._timeout_value = None
 		self._abort_timer = None
 		self._abort_timer_temp = None
+		self._devices = []
 		self.ctx = ssl.create_default_context()
 		self.ctx.check_hostname = False
 		self.ctx.verify_mode = ssl.CERT_NONE
+		self.powered = False
+		self.statusClass = "powerOff"
+		self.clasConnected = False
+		self.clas_plug_timeout = 5
+
 
 	def initialize(self):
 		self.gcode = self._settings.get(["gcode"])
@@ -82,6 +91,12 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 		self._mode_shutdown_api = self._settings.get_boolean(["_mode_shutdown_api"])
 		self._logger.debug("_mode_shutdown_api: %s" % self._mode_shutdown_api)	
 				
+		self._mode_shutdown_clas = self._settings.get_boolean(["_mode_shutdown_clas"])
+		self._logger.debug("_mode_shutdown_clas: %s" % self._mode_shutdown_clas)
+
+		self._clas_plug_name = self._settings.get(["_clas_plug_name"])
+		self._logger.debug("_clas_plug_name: %s" % self._clas_plug_name)
+
 		self._mode_shutdown_api_custom = self._settings.get_boolean(["_mode_shutdown_api_custom"])
 		self._logger.debug("_mode_shutdown_api_custom: %s" % self._mode_shutdown_api_custom)
 								
@@ -134,6 +149,9 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 		self._logger.debug("rememberCheckBox: %s" % self.rememberCheckBox)
 
 		self.lastCheckBoxValue = self._settings.get_boolean(["lastCheckBoxValue"])
+
+		self.clas_plug_timeout = self._settings.get_int(["clas_plug_timeout"])
+		
 		self._logger.debug("lastCheckBoxValue: %s" % self.lastCheckBoxValue)
 		if self.rememberCheckBox:
 			self._shutdown_printer_enabled = self.lastCheckBoxValue
@@ -143,6 +161,7 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 	
 	def on_after_startup(self):
 		self.hookEnclosureScreenfct()
+		self.connectToClasPlug()
 		
 	def hookEnclosureScreenfct(self, data=dict()):
 		self._logger.error("send status off 1")
@@ -197,14 +216,16 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 			icon="power-off"),
 			dict(type="settings", custom_bindings=False)]
 	    
-
 	def get_api_commands(self):
 		return dict(enable=["eventView"],
 		    status=[],
 		    update=["eventView"],
 		    disable=["eventView"],
 		    shutdown=["mode", "eventView"],
-		    abort=["eventView"])
+		    abort=["eventView"],
+			toggle=["eventView"],
+			fetchdata=["eventView"],
+			connectclas=["eventView"])
 
 	def get_additional_permissions(self):
 		return [
@@ -215,6 +236,7 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 					roles=["admin"],
 					dangerous=True)
 				]
+	
 	def on_api_command(self, command, data):
 		# if not user_permission.can():
 			# return make_response("Insufficient rights", 403)
@@ -235,6 +257,13 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 		elif command == "disable":
 			self._shutdown_printer_enabled = False
 			self.hookEnclosureScreenfct()
+		elif command == "toggle":
+			self.toggle_printer_by_clas()
+		elif command == "fetchdata":
+			self.updateState()
+			return make_response(jsonify({"state": self.statusClass}), 200)
+		elif command == "connectclas":
+			self.connectToClasPlug()
 		elif command == "shutdown":
 			def process():
 					try:
@@ -359,6 +388,14 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 		else:
 			self._timer_start()
 
+	def updateState(self):
+		if self.powered:
+			self.statusClass = "powerOn"
+		elif not self.powered:
+			self.statusClass = "powerOff"
+		if not self.clasConnected:
+			self.statusClass = "disconnected"
+		#self._logger.info(self.statusClass)
 	
 	def _temperature_task(self):
 		try:
@@ -398,6 +435,7 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 				self.sendNotif()
 		except:
 			self._logger.error("Failed to connect to call api: %s" % str(traceback.format_exc()))
+	
 	def _timer_start(self):
 		if self._abort_timer is not None:
 			self._destroyNotif()
@@ -464,6 +502,8 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 			self._shutdown_printer_by_gcode()
 		elif self._mode_shutdown_api == True:
 			self._shutdown_printer_by_API()
+		elif self._mode_shutdown_clas:
+			self.toggle_printer_by_clas()
 		else:
 			self._shutdown_printer_by_API_custom()
 
@@ -474,6 +514,8 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 			self._shutdown_printer_by_API()
 		elif mode == 3:
 			self._shutdown_printer_by_API_custom()
+		elif mode == 4:
+			self.toggle_printer_by_clas()
 
 	def _extraCommand(self):
 		if self.shutdown_printer is not None:
@@ -517,6 +559,34 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 			self._logger.error("Failed to connect to call api: %s" % str(traceback.format_exc()))
 			return
 
+	def toggle_printer_by_clas(self):
+		if self.clasConnected:
+			self.powered = not self.powered
+			self._logger.info("Toggled baby, ", self.powered)
+			self.unit.set_power(self.powered)
+			if self.powered:
+				time.sleep(10)
+				self._printer.connect()
+		else:
+			self._logger.info("Not connected")
+
+	def connectToClasPlug(self):
+		self.devices = broadlink.discover(timeout=int(self.clas_plug_timeout), discover_ip_address='192.168.1.255')
+		self._logger.info(self._clas_plug_name)
+		if self._clas_plug_name is not None:
+			for device in self.devices:
+				if device.name.startswith(self._clas_plug_name):
+					self.unit = device
+			try:
+				self.unit.auth()
+				self._logger.info(f"Added unit: {self.unit}")
+				self.powered = self.unit.check_power()
+				self.clasConnected = True
+				
+			except:
+				self.clasConnected = False
+				self._logger.info("Failed to connect to plug")
+		return self.clasConnected
 
 	def _shutdown_printer_by_API_custom(self):
 		if self._printer.get_state_id() == "PRINTING" and self._printer.is_printing() == True:
@@ -600,8 +670,7 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 				self._abort_timer_temp = None
 			self._timeout_value = None
 			self._logger.info("Shutdown aborted.")
-			self._destroyNotif()
-			
+			self._destroyNotif()			
 			
 	def get_settings_defaults(self):
 		return dict(
@@ -625,7 +694,9 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 			printFailed = False,
 			printCancelled = False,
 			rememberCheckBox = False,
-			lastCheckBoxValue = False
+			lastCheckBoxValue = False,
+			clas_plug_timeout = 5,
+			_clas_plug_name = "Name"
 		)
 
 	def on_settings_save(self, data):
@@ -636,6 +707,9 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 		self.api_key_plugin = self._settings.get(["api_key_plugin"])
 		self._mode_shutdown_gcode = self._settings.get_boolean(["_mode_shutdown_gcode"])
 		self._mode_shutdown_api = self._settings.get_boolean(["_mode_shutdown_api"])
+		self._mode_shutdown_clas = self._settings.get_boolean(["_mode_shutdown_clas"])
+		self._clas_plug_name = self._settings.get(["_clas_plug_name"])
+		self.clas_plug_timeout = self._settings.get(["clas_plug_timeout"])
 		self._mode_shutdown_api_custom = self._settings.get_boolean(["_mode_shutdown_api_custom"])
 		self.api_custom_POST = self._settings.get_boolean(["api_custom_POST"])
 		self.api_custom_GET = self._settings.get_boolean(["api_custom_GET"])
@@ -655,6 +729,8 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 		self.rememberCheckBox = self._settings.get_boolean(["rememberCheckBox"])
 		self.lastCheckBoxValue = self._settings.get_boolean(["lastCheckBoxValue"])
 
+		# self.connectToClasPlug()
+
 	def get_update_information(self):
 		return dict(
 			shutdownprinter=dict(
@@ -668,7 +744,7 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 			current=self._plugin_version,
 
 			# update method: pip w/ dependency links
-			pip="https://github.com/devildant/OctoPrint-ShutdownPrinter/archive/{target_version}.zip"
+			pip="https://github.com/Dingushippo/OctoPrint-ShutdownPrinter/archive/{target_version}.zip"
 		)
 	)
 

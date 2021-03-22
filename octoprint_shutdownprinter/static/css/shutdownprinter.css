@@ -32,6 +32,18 @@
 	display:none;
 }
 
+.powerOn {
+    color: lime
+}
+
+.powerOff {
+    color: #333
+}
+
+.disconnected {
+    color: red
+}
+
 #touch body #tabs #sidebar_plugin_shutdownprinter_wrapper_link a:before, #touch body #navbar #all_touchui_settings #sidebar_plugin_shutdownprinter_wrapper_link a:before,#touch body #tabs #sidebar_plugin_shutdownprinter_wrapper_link2 a:before, #touch body #navbar #all_touchui_settings #sidebar_plugin_shutdownprinter_wrapper_link2 a:before {
     content: "\f011";
 }

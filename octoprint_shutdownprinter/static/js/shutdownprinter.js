@@ -6,6 +6,7 @@ $(function() {
         self.settings = parameters[1];
         self.printer = parameters[2];
 		self.timewebsockermessage = 0;
+        self.colorClass = ko.observable()
 		
 		
         self.shutdownprinterEnabled = ko.observable();
@@ -15,6 +16,7 @@ $(function() {
 			$("#tester_shutdownprinter_api").prop("disabled", stat);
 			$("#tester_shutdownprinter_api_custom").prop("disabled", stat);
 		}
+
 		
 		self.eventChangeCheckToRadio =  function (id, listOff) {
 				$(id).on("change", function () {
@@ -35,6 +37,31 @@ $(function() {
 			})
 		}
 		
+        $("#connect_shutdownprinter_clas").on("click", function () {
+			$(this).children("i").show();
+            self.settings.saveData();
+            timeout = self.settings.settings.clas_plug_timeout*1000
+            console.log("Start")
+			setTimeout(function (current) {
+                current.children("i").hide();
+            }, timeout, $(this));
+			$.ajax({
+                url: API_BASEURL + "plugin/shutdownprinter",
+                type: "POST",
+                dataType: "json",
+                data: JSON.stringify({
+                    command: "connectclas",
+                    eventView : false
+                }),
+                contentType: "application/json; charset=UTF-8",
+                success: function() {
+                    console.log("Success")
+                }
+            });
+			
+			
+			 
+		});	
 		$("#tester_shutdownprinter_gcode").on("click", function () {
 			self.settings.saveData();
 			$(this).children("i").show();
@@ -55,8 +82,8 @@ $(function() {
 			
 			}, 1000, $(this));
 			 
-		});		
-		$("#tester_shutdownprinter_api").on("click", function () {
+		});	
+        $("#tester_shutdownprinter_clas").on("click", function () {
 			self.settings.saveData();
 			$(this).children("i").show();
 			setTimeout(function (current) {
@@ -66,17 +93,41 @@ $(function() {
                 dataType: "json",
                 data: JSON.stringify({
                     command: "shutdown",
-					mode: 2,
+					mode: 4,
 					eventView : true
                 }),
                 contentType: "application/json; charset=UTF-8"
             }).done(function() {
 				current.children("i").hide();
 			});
+			
+			}, 1000, $(this));
+			 
+		});
+		$("#tester_shutdownprinter_api").on("click", function () {
+			self.settings.saveData();
+			$(this).children("i").show();
+			setTimeout(function (current) {
+                $.ajax({
+                    url: API_BASEURL + "plugin/shutdownprinter",
+                    type: "POST",
+                    dataType: "json",
+                    data: JSON.stringify({
+                        command: "shutdown",
+                        mode: 2,
+                        eventView : true
+                    }),
+                    contentType: "application/json; charset=UTF-8",
+                    complete: function() {
+                        console.log("Complete")
+                        current.children("i").hide();
+                    }
+                }).done(function() {
+                    current.children("i").hide();
+                });
 			}, 1000, $(this));
 			
-		});	
-		
+		});		
 		$("#tester_shutdownprinter_api_custom").on("click", function () {
 			self.settings.saveData();
 			$(this).children("i").show();
@@ -97,9 +148,11 @@ $(function() {
 			}, 1000, $(this));
 			
 		});
+
 		self.listOffMode = [
 			{"id" : "#shutdownprinter_mode_shutdown_gcode"},
 			{"id" : "#shutdownprinter_mode_shutdown_api"},
+            {"id" : "#shutdownprinter_mode_shutdown_clas"},
 			{"id" : "#shutdownprinter_mode_shutdown_api_custom"},
 		]
 		self.listOffHTTPMethode = [
@@ -109,6 +162,7 @@ $(function() {
 		]
 		self.eventChangeCheckToRadio("#shutdownprinter_mode_shutdown_gcode", self.listOffMode);
 		self.eventChangeCheckToRadio("#shutdownprinter_mode_shutdown_api", self.listOffMode);
+        self.eventChangeCheckToRadio("#shutdownprinter_mode_shutdown_clas", self.listOffMode);
 		self.eventChangeCheckToRadio("#shutdownprinter_mode_shutdown_api_custom", self.listOffMode);
 		
 		self.eventChangeCheckToRadio("#shutdownprinter_api_custom_GET", self.listOffHTTPMethode);
@@ -173,6 +227,9 @@ $(function() {
 		 //add octoprint event for check finish
 		self.onStartupComplete = function () {
 			//self.touchUIMoveElement(self, 0);
+            //console.log("HELLO THEERE")
+            
+            self.fetchdata()
 			if (self.printer.isPrinting())
 			{
 				self.testButtonChangeStatus(true);
@@ -182,8 +239,8 @@ $(function() {
 			 
 			
 		};
-		
-		self.onUserLoggedIn = function() {
+        
+        self.onUserLoggedIn = function() {
 			$.ajax({
                     url: API_BASEURL + "plugin/shutdownprinter",
                     type: "POST",
@@ -209,16 +266,40 @@ $(function() {
 		
 		self.onUserLoggedOut = function() {
 		}
+
+        self.fetchdata = function(){
+            $.ajax({
+                url: API_BASEURL + "plugin/shutdownprinter",
+                type: "POST",
+                dataType: "json",
+                data: JSON.stringify({
+                    command: "fetchdata",
+                    eventView : false
+                }),
+                contentType: "application/json; charset=UTF-8",
+                success: function(data, textStatus, jqXHR) {
+                    //console.log(data)
+                    self.colorClass(data["state"])
+                },
+                complete: function() {
+                    setTimeout(self.fetchdata, 5000)
+                    //console.log(self.colorClass)
+                }
+            });
+
+           }
         
 		self.onEventPrinterStateChanged = function(payload) {
-        			if (payload.state_id == "PRINTING" || payload.state_id == "PAUSED"){
-        				self.testButtonChangeStatus(true);
-        			} else {
-        				self.testButtonChangeStatus(false);
-        			}
-        		}
+    
+            if (payload.state_id == "PRINTING" || payload.state_id == "PAUSED"){
+                self.testButtonChangeStatus(true);
+            } else {
+                self.testButtonChangeStatus(false);
+            }
+        }
 		
         self.onShutdownPrinterEvent = function() {
+            //console.log("AYAYAY")
             if (self.shutdownprinterEnabled()) {
                 $.ajax({
                     url: API_BASEURL + "plugin/shutdownprinter",
@@ -247,6 +328,7 @@ $(function() {
         self.shutdownprinterEnabled.subscribe(self.onShutdownPrinterEvent, self);
 
         self.onDataUpdaterPluginMessage = function(plugin, data) {
+            //console.log('AAA')
             if (plugin != "shutdownprinter" && plugin != "octoprint_shutdownprinter") {
                 return;
             }
@@ -309,11 +391,29 @@ $(function() {
                 contentType: "application/json; charset=UTF-8"
             })
         }
+
+        self.togglePrinter = function() {
+            //console.log("Toggle")
+            $.ajax({
+                url: API_BASEURL + "plugin/shutdownprinter",
+                type: "POST",
+                dataType: "json",
+                data: JSON.stringify({
+                    command: "toggle",
+                    eventView : false
+                }),
+                contentType: "application/json; charset=UTF-8"
+            })
+        }
+
+    //$(document).ready(function(){
+      //      setTimeout(self.fetchdata, 5000);
+        //   });
     }
 
     OCTOPRINT_VIEWMODELS.push([
         ShutdownPrinterViewModel,
         ["loginStateViewModel", "settingsViewModel", "printerStateViewModel"],
-		$(".sidebar_plugin_shutdownprinter").get(0)
+		[".sidebar_plugin_shutdownprinter", "#navbar_plugin_shutdownprinter"]
     ]);
 });

@@ -1,0 +1,10 @@
+Metadata-Version: 1.0
+Name: OctoPrint-ShutdownPrinter
+Version: 1.0.9
+Summary: This plugin work with plugin OctoPrint-TPLinkSmartplug, it send the Gcode M81 with IP after print complete for shutdown printer
+Home-page: https://github.com/devildant/OctoPrint-ShutdownPrinter
+Author: devildant
+Author-email: UNKNOWN
+License: AGPLv3
+Description: UNKNOWN
+Platform: UNKNOWN
