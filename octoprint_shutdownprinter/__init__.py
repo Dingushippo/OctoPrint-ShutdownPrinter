@@ -565,7 +565,7 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 			self._logger.info("Toggled baby, ", self.powered)
 			self.unit.set_power(self.powered)
 			if self.powered:
-				time.sleep(20)
+				time.sleep(5)
 				self._printer.connect()
 			else:
 				self._printer.disconnect()
