@@ -567,6 +567,8 @@ class shutdownprinterPlugin(octoprint.plugin.SettingsPlugin,
 			if self.powered:
 				time.sleep(5)
 				self._printer.connect()
+				time.sleep(5)
+				self._printer.commands("FIRMWARE_RESTART")
 			else:
 				self._printer.disconnect()
 		else:
